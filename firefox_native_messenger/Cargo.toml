@@ -1,0 +1,11 @@
+[package]
+name = "firefox_native_messenger"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1.0.140"
+tokio = { version = "1", features = ["full"] }
+zbus = "5.9.0"
+shared = { path = "../shared" }
+serde = "1.0.219"

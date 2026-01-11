@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Activity Warden Web Watcher",
+  "version": "1.1",
+  "description": "An MV3 extension that talks with native programs to enforce browser limits.",
+  "permissions": [
+    "nativeMessaging",
+    "tabs"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "Web Watcher",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icons/jail_48x48.png",
+      "96": "icons/jail_96x96.png"
+    }
+    
+  },
+  "host_permissions": [],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "web_watcher@activity_warden.org"
+    }
+  }
+}

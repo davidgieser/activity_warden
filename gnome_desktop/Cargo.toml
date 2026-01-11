@@ -1,0 +1,17 @@
+[package]
+name = "gnome_desktop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gtk = { version = "0.9.0", package = "gtk4", features = ["v4_18"] }
+adw = { version = "0.7", package = "libadwaita", features = ["v1_4"] }  
+relm4 = { version = "0.9.1", features = ["macros", "libadwaita"] }
+relm4-components = "0.9.1"
+zbus = "5.10.0"
+tracker = "0.2.2"
+shared = { path = "../shared" }
+futures-util = "0.3.31"
+plotters = "0.3.7"
+plotters-cairo = "=0.7.0"
+chrono = "0.4.42"
