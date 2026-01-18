@@ -81,6 +81,7 @@ impl Component for HomePage {
             add_overlay = &gtk::Button {
                 set_child: Some(&gtk::Image::from_icon_name("list-add-symbolic")),
                 add_css_class: "circular",
+                add_css_class: "opaque",
                 set_width_request: 48,
                 set_height_request: 48,
                 set_halign: gtk::Align::End,

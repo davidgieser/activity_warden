@@ -169,7 +169,9 @@ impl FactoryComponent for TimerDisplayModel {
 /// Otherwise, display a time of 0.
 fn fmt_timer_duration(timer: &Timer) -> String {
     let today = chrono::Local::now();
-    let weekday = (today.weekday() as usize) + 1;
+
+    // In Chrono, Monday = 0 and Sunday = 6. Shift to a more intuitive representation.
+    let weekday = ((today.weekday() as usize) + 1) % 7;
     let duration = if timer.allowed_days[weekday] {
         timer.time_limit
     } else {

@@ -67,9 +67,9 @@ fn is_display_name_blocked(context: &DaemonContext, host: &Host, display_name: &
     let timers = context.timers.load_full();
     for timer in (*timers).clone() {
         if timer.display_name == *display_name {
-            let weekday = (today.weekday() as usize) + 1;
-            info!("timer.allowed_days[{}] = {}", weekday % 7, timer.allowed_days[weekday % 7]);
-            if timer.allowed_days[weekday % 7] {
+            let weekday = ((today.weekday() as usize) + 1) % 7;
+            info!("timer.allowed_days[{}] = {}", weekday, timer.allowed_days[weekday]);
+            if timer.allowed_days[weekday] {
                 if let Some(host_durations) = context.timer_durations.get(host) {
                     // If the day is specified, and the timer is set to 0, no activity will be tracked.
                     // As such, we implicitly know that the page is blocked.
