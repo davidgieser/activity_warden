@@ -1,6 +1,6 @@
 {
   "name": "com.activity_warden.user_daemon",
-  "description": "User daemon written in Rust for managin the ActivityWarden",
+  "description": "User daemon written in Rust for managing the ActivityWarden",
   "path": "/home/davidgieser/Coding/activity_warden/user_daemon/target/release/user_daemon",
   "type": "stdio",
   "allowed_extensions": [ "web_watcher@activity_warden.org" ]
