@@ -147,8 +147,10 @@ impl Component for DataPage {
 
                     // Draw a temporary graph to capture the pixel width and optimal label padding.
                     {
+                        // let total_duration = durations.iter().sum::<usize>();
+                        // let title = format!("Top 10 Sites Used Today ({} total)", fmt_mm_ss(total_duration));
                         let tmp = ChartBuilder::on(&root)
-                            .caption("Top 10 Sites Used Today", (FONT_NAME, 24).into_font().color(&fg))
+                            // .caption("Top 10 Sites Used Today", (FONT_NAME, 24).into_font().color(&fg))
                             .margin(12)
                             .x_label_area_size(40)
                             .y_label_area_size(40)
@@ -174,6 +176,17 @@ impl Component for DataPage {
                         .x_label_area_size(40)
                         .y_label_area_size(40)
                         .build_cartesian_2d(0..x_range, y_range)?;
+
+                    // Write a small subtitle that displays the total time.
+                    let total_duration = durations.iter().sum::<usize>();
+                    let subtitle = format!("Total Time: {} hours", fmt_mm_ss(total_duration));
+                    root.draw_text(
+                        &subtitle,
+                        &TextStyle::from((FONT_NAME, 16))
+                            .color(&fg)
+                            .pos(Pos::new(HPos::Center, VPos::Top)),
+                        (w / 2, 45),
+                    )?;
 
                     let font = (FONT_NAME, 12).into_font().color(&fg);
                     chart.configure_mesh()
@@ -290,4 +303,10 @@ impl Component for DataPage {
             }
         }
     }
+}
+
+fn fmt_mm_ss(mut secs: usize) -> String {
+    let minutes = secs / 60;
+    secs %= 60;
+    format!("{:02}:{:02}", minutes, secs)
 }
