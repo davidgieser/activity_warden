@@ -84,6 +84,27 @@ impl DaemonContext {
     }
 
 
+    pub fn get_last_event(&self, source: &Host) -> Option<&LastEvent> {
+        return self.last_event.get(source);
+    }
+
+
+    pub fn compute_focus_change(&self, last_event: Option<&LastEvent>) -> Option<FocusChange> {
+        let now = Utc::now();
+        let mut focus_change = None;
+        if let Some(last_event) = last_event {
+            focus_change = Some(FocusChange {
+                host: last_event.event.source.clone(),
+                display_name: last_event.event.display_name.clone(),
+                timestamp: now,
+                duration: (now - last_event.time).num_seconds() as u32,
+            });
+        }
+
+        focus_change
+    }
+
+
     /// Update the corresponding durations for a given event.
     pub fn update_event_durations(&mut self, event: &Event, set_last_event: bool) -> Option<FocusChange> {
         let now = Utc::now();

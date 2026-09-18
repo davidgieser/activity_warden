@@ -47,6 +47,7 @@ function updateActiveTab() {
           tab_id: activeTab.id, 
           tab_name: activeTab.title, 
           display_name: url.hostname,
+          url: url.toString(),
         };
 
         console.log("Sending message: ", event_obj)

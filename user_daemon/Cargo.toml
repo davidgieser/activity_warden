@@ -21,3 +21,4 @@ arc-swap = "1.7.1"
 futures-lite = "2.6.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
+notify-rust = { version = "4.17.0", features = ["async"] }

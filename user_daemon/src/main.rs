@@ -2,11 +2,11 @@ mod event_bus;
 mod proxy;
 mod persistence;
 mod context;
+mod backstop;
 
 use futures_lite::stream::StreamExt;
 use std::sync::{Arc, atomic::{Ordering, AtomicBool}};
 use serde_json::Value;
-use zbus::Result;
 use zbus::connection::Builder;
 use tokio::sync::broadcast;
 use tokio::signal::unix::{signal, SignalKind};
@@ -15,13 +15,16 @@ use tokio::task::JoinHandle;
 use chrono::{DateTime, Datelike, Duration as CDuration, NaiveTime, Local, Utc};
 use shared::{dbus::{DBus, Host, Interface}, types::Event};
 use shared::types::EventType;
-use log::info;
+use log::{info, warn};
 use tokio::time::{self, Duration, Instant};
 use zbus::Connection;
+use notify_rust::{Notification, Timeout, Urgency};
 
+use shared::types::schema::FocusChange;
 use crate::event_bus::EventBus;
 use crate::proxy::{FirefoxWatcherProxy, SuspendListenerProxy, ScreenSaverProxy};
-use crate::context::DaemonContext;
+use crate::context::{DaemonContext, LastEvent};
+use crate::backstop::{RedditBackstop, YoutubeBackstop, BackStop};
 
 /// The maximum size of the event bus before old messages are dropped.
 const CAPACITY: usize = 100;
@@ -31,8 +34,25 @@ pub enum DisplayNameAction {
     Block,
     /// Set a timer for `u32` seconds.
     Time(u32),
+    /// Issue a warning to the user while setting a blocking timer.
+    WarnTime(String, u32),
     /// Track the time, but perform no actions.
     Ignore,
+}
+
+
+async fn warn_user(message: String) -> Result<(), notify_rust::error::Error> {
+    Notification::new()
+        .appname("Activity Warden")
+        .summary("Activity Warden warning")
+        .body(message.as_str())
+        .icon("dialog-warning")
+        .urgency(Urgency::Normal)
+        .timeout(Timeout::Milliseconds(10_000))
+        .show_async()
+        .await?;
+
+    Ok(())
 }
 
 
@@ -62,7 +82,27 @@ fn instant_until_next_local_midnight() -> Instant {
 
 
 /// Determine if a particular display name is blocked or if a new timer should be set.
-fn is_display_name_blocked(context: &DaemonContext, host: &Host, display_name: &String) -> DisplayNameAction {
+fn is_display_name_blocked(
+    context: &DaemonContext, 
+    event: &Event,
+    last_event: Option<&LastEvent>,
+    fc: &Option<FocusChange>,
+    backstops: &mut Vec<Box<dyn BackStop>>,
+) -> DisplayNameAction {
+    let display_name = &event.display_name;
+    let host = &event.source;
+
+    // Process all backstops prior to general timers to ensure that 
+    // internal state of each `BackStop` is properly updated.
+    // We also assume that no two `BackStop` consume the same events.
+    for backstop in backstops {
+        let res = backstop.trigger_backstop(&last_event, &event, &fc);
+        if res.is_some() {
+            info!("[BACKSTOP] Encountered backstop for {}.", display_name);
+            return res.unwrap()
+        }
+    }
+
     let today = chrono::Local::now();
     let timers = context.timers.load_full();
     for timer in (*timers).clone() {
@@ -102,7 +142,7 @@ pub async fn block_display_name(
     session_conn: Connection,
     event: Event,
     timeout: u32,
-) -> Result<()> {
+) -> zbus::Result<()> {
     // Wait for the timer to expire before sending the shutdown.
     if timeout > 0 {
         let dur = Duration::from_secs(timeout as u64);
@@ -120,7 +160,9 @@ pub async fn block_display_name(
 
             let metadata: Value = serde_json::from_str(&event.metadata)
                 .expect("Invalid metadata structure");
-            let _ = proxy.request_close(&metadata.to_string()).await;
+            if let Some(tab_id) = metadata.get("tab_id").and_then(Value::as_str) {
+                let _ = proxy.request_close(&tab_id.to_string()).await;
+            }
         },
         _ => { panic!("Received unexpected host for the FocusChange event.") }
     };
@@ -145,13 +187,13 @@ pub async fn emit_focus_change(
             DBus::object_path(&Host::UserDaemon, &Interface::DaemonContext), 
             DBus::interface_name(&Interface::DaemonContext),
             "DurationChanged",
-            &fc.unwrap(),
+            &fc.clone().unwrap(),
         ).await.unwrap();
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> zbus::Result<()> {
     // Build the rust logger.
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -180,6 +222,11 @@ async fn main() -> Result<()> {
         info!("SIGTERM received, setting shutdown flag...");
         flag_clone.store(true, Ordering::SeqCst);
     });
+
+    let mut backstops: Vec<Box<dyn BackStop>> = vec![
+        Box::new(RedditBackstop::new()),
+        Box::new(YoutubeBackstop::new()),
+    ];
 
     // Listen for events that imply the computer is turning off.
     let system_conn = zbus::Connection::system().await?;
@@ -212,7 +259,16 @@ async fn main() -> Result<()> {
                 context.reset_daily_state();
                 match &event.event_type {
                     EventType::FocusChange => {
-                        let action = is_display_name_blocked(&context, &event.source, &event.display_name);
+                        let last_event = context.get_last_event(&event.source);
+                        let fc = context.compute_focus_change(last_event);
+                        let action = is_display_name_blocked(
+                            &context, 
+                            &event,
+                            last_event,
+                            &fc,
+                            &mut backstops,
+                        );
+
                         match action {
                             DisplayNameAction::Time(remaining_duration) => {
                                 emit_focus_change(&mut context, &session_conn, event.clone(), true).await;
@@ -226,11 +282,26 @@ async fn main() -> Result<()> {
                                     }
                                 }));
                             }
+                            DisplayNameAction::WarnTime(warning, remaining_duration) => {
+                                emit_focus_change(&mut context, &session_conn, event.clone(), true).await;
+
+                                if let Err(_) = warn_user(warning).await {
+                                    warn!("[WARNING] Failed to broadcast notification to user.")
+                                }
+
+                                timer_task = Some(tokio::spawn({
+                                    let session_conn = session_conn.clone();
+                                    let event = event.clone();
+                                    async move {
+                                        let _ = block_display_name(session_conn, event, remaining_duration).await;
+                                    }
+                                }));
+                            },
                             DisplayNameAction::Block => {
-                                let _ = block_display_name(session_conn.clone(), event, 0).await;
+                                let _ = block_display_name(session_conn.clone(), event.clone(), 0).await;
                             },
                             DisplayNameAction::Ignore => {
-                                emit_focus_change(&mut context, &session_conn, event, true).await;
+                                emit_focus_change(&mut context, &session_conn, event.clone(), true).await;
                             },
                         }
                     },

@@ -19,3 +19,5 @@ Restart=on-failure
 [Install]
 WantedBy=default.target
 ```
+
+If you push out a new version of the daemon, be sure to run `systemctl --user daemon-reload` followed by `systemctl --user restart activity_warden` for the changes to be picked up.

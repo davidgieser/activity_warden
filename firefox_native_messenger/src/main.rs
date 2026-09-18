@@ -48,13 +48,19 @@ async fn main() -> Result<()> {
         let event = match event_type {
             "focus_change" => {
                 let tab_id = input.get("tab_id").unwrap();
+                let url = input.get("url").unwrap();
                 let display_name = input.get("display_name").unwrap();
+
+                let metadata = json!({
+                    "tab_id": tab_id.to_string(),
+                    "url": url,
+                });
 
                 Event {
                     event_type: EventType::FocusChange,
                     source: Host::FirefoxWatcher,
                     display_name: display_name.as_str().unwrap().to_string(),
-                    metadata: tab_id.to_string(),
+                    metadata: metadata.to_string(),
                 }
             },
             "focus_lost" => {
@@ -66,7 +72,7 @@ async fn main() -> Result<()> {
                 }
             },
             _ => {
-                panic!("Unexpected event type: {}", event_type);
+                panic!("Unexpected event type: {}", event_type)
             }
         };
 
